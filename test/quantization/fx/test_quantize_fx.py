@@ -1265,8 +1265,8 @@ class TestQuantizeFx(QuantizationTestCase):
 
     def test_standalone_module_float_interface(self):
         float_interface_config = {
-            "input_quantized_idxs": [],  # float input
-            "output_quantized_idxs": [],  # float output
+            "input_quantized_idxs": {},  # float input
+            "output_quantized_idxs": {},  # float output
         }
         interface_config = float_interface_config
         # input and output of first conv, observer for standalone module
@@ -1299,8 +1299,8 @@ class TestQuantizeFx(QuantizationTestCase):
 
     def test_standalone_module_quantized_interface(self):
         quantized_interface_config = {
-            "input_quantized_idxs": [0],  # quantized input
-            "output_quantized_idxs": [0],  # quantized output
+            "input_quantized_idxs": {0: torch.quint8},  # quantized input
+            "output_quantized_idxs": {0: torch.quint8},  # quantized output
         }
         interface_config = quantized_interface_config
         # observer for input and output of first conv
@@ -2306,7 +2306,7 @@ class TestQuantizeFx(QuantizationTestCase):
 
     def test_quantized_input_quantized_output(self):
         prepare_custom_config_dict = {
-            'input_quantized_idxs': [0], 'output_quantized_idxs': [0]}
+            'input_quantized_idxs': {0: torch.quint8}, 'output_quantized_idxs': {0: torch.quint8}}
         prepare_count_check = {
             ns.call_module(torch.ao.quantization.MinMaxObserver): 2,
         }
@@ -2319,7 +2319,7 @@ class TestQuantizeFx(QuantizationTestCase):
 
     def test_fp32_input_quantized_output(self):
         prepare_custom_config_dict = {
-            'output_quantized_idxs': [0]}
+            'output_quantized_idxs': {0: torch.quint8}}
         prepare_count_check = {
             ns.call_module(torch.ao.quantization.MinMaxObserver): 3,
         }
@@ -2332,7 +2332,7 @@ class TestQuantizeFx(QuantizationTestCase):
 
     def test_quantized_input_fp32_output(self):
         prepare_custom_config_dict = {
-            'input_quantized_idxs': [0]}
+            'input_quantized_idxs': {0: torch.quint8}}
         prepare_count_check = {
             ns.call_module(torch.ao.quantization.MinMaxObserver): 2,
         }
@@ -2354,6 +2354,180 @@ class TestQuantizeFx(QuantizationTestCase):
         }
         self._test_quantized_inputs_outputs(
             prepare_custom_config_dict, prepare_count_check, convert_count_check)
+
+    def _test_quantized_multiple_inputs_outputs(
+            self, prepare_custom_config_dict, prepare_count_check,
+            convert_count_check, qconfig_dict):
+        """
+        Test the option to have inputs and outputs of the graph quantized
+        """
+        class M(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.conv1 = torch.nn.Conv2d(1, 1, 1)
+                self.conv2 = torch.nn.Conv2d(1, 1, 1)
+
+            def forward(self, x):
+                c1 = self.conv1(x)
+                c2 = self.conv2(x)
+                return c1, c2
+
+        # quantized input, quantized output
+        m = M()
+        qconfig_dict = {'': torch.ao.quantization.default_qconfig}
+        m.eval()
+        mp = torch.ao.quantization.quantize_fx.prepare_fx(
+            m, qconfig_dict,
+            prepare_custom_config_dict=prepare_custom_config_dict)
+        self.checkGraphModuleNodes(mp, expected_node_occurrence=prepare_count_check)
+        mp(torch.randn(1, 1, 4, 4))
+        mq = torch.ao.quantization.quantize_fx.convert_fx(mp)
+        self.checkGraphModuleNodes(mq, expected_node_occurrence=convert_count_check)
+
+    def test_quantized_input_quantized_multiple_output(self):
+        prepare_custom_config_dict = {
+            'input_quantized_idxs': {0: torch.quint8},
+            'output_quantized_idxs': {0: torch.quint8, 1: torch.quint8}
+        }
+        # two observer needed for two conv module
+        prepare_count_check = {
+            ns.call_module(torch.ao.quantization.MinMaxObserver): 2,
+        }
+        # two quint8 outputs in config, so no quantize_per_tersor and dequantize needed.
+        convert_count_check = {
+            ns.call_function(torch.quantize_per_tensor): 0,
+            ns.call_method('dequantize'): 0,
+        }
+        qconfig_dict = {'': torch.ao.quantization.default_qconfig}
+        self._test_quantized_multiple_inputs_outputs(
+            prepare_custom_config_dict, prepare_count_check, convert_count_check,
+            qconfig_dict)
+
+    def test_quantized_input_quantized_single_output(self):
+        prepare_custom_config_dict = {
+            'input_quantized_idxs': {0: torch.quint8},
+            'output_quantized_idxs': {1: torch.quint8}
+        }
+        # two observer needed for two conv module
+        prepare_count_check = {
+            ns.call_module(torch.ao.quantization.MinMaxObserver): 2,
+        }
+        # one quint8 outputs in config, we have two outputs from the model,
+        # so no 'quantize_per_tersor' and 1 'dequantize' needed.
+        convert_count_check = {
+            ns.call_function(torch.quantize_per_tensor): 0,
+            ns.call_method('dequantize'): 1,
+        }
+        qconfig_dict = {'': torch.ao.quantization.default_qconfig}
+        self._test_quantized_multiple_inputs_outputs(
+            prepare_custom_config_dict, prepare_count_check, convert_count_check,
+            qconfig_dict)
+
+    def _test_quantized_inputs_outputs_dtype(
+            self, prepare_custom_config_dict, prepare_count_check,
+            convert_count_check, qconfig_dict):
+        """
+        Test the option to have inputs and outputs of the graph quantized
+        """
+
+        class M(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.cf1 = torch.nn.ChannelShuffle(2)
+                self.cf2 = torch.nn.ChannelShuffle(4)
+
+            def forward(self, x):
+                c1 = self.cf1(x)
+                c2 = self.cf2(x)
+                return c1, c2
+
+        # quantized input, quantized output
+        m = M()
+        qconfig_dict = {'': torch.ao.quantization.default_qconfig}
+        m.eval()
+        mp = torch.ao.quantization.quantize_fx.prepare_fx(
+            m, qconfig_dict,
+            prepare_custom_config_dict=prepare_custom_config_dict)
+        self.checkGraphModuleNodes(mp, expected_node_occurrence=prepare_count_check)
+        mp(torch.randn(1, 8, 4, 4))
+        mq = torch.ao.quantization.quantize_fx.convert_fx(mp)
+        self.checkGraphModuleNodes(mq, expected_node_occurrence=convert_count_check)
+
+
+    def test_quantized_input_quantized_output_dtype(self):
+        prepare_custom_config_dict = {
+            'input_quantized_idxs': {0: torch.quint8},
+            'output_quantized_idxs': {0: torch.qint8}
+        }
+        prepare_count_check = {
+            ns.call_module(torch.ao.quantization.HistogramObserver): 0,
+        }
+        # channel shuffle is a float module, we have a qint8 input,
+        # so 2 'quantize_per_tensor' needed for each channel shuffle,
+        # 1 qint8 output in config, so 1 'dequantize' needed.
+        convert_count_check = {
+            ns.call_function(torch.quantize_per_tensor): 2,
+            ns.call_method('dequantize'): 1,
+        }
+        custom_qconfig = torch.ao.quantization.QConfig(
+            activation=torch.ao.quantization.observer.HistogramObserver.with_args(
+                qscheme=torch.per_tensor_symmetric, dtype=torch.qint8
+            ),
+            weight=torch.ao.quantization.default_weight_observer
+        )
+
+        qconfig_dict = {'': custom_qconfig}
+        self._test_quantized_inputs_outputs_dtype(
+            prepare_custom_config_dict, prepare_count_check, convert_count_check,
+            qconfig_dict)
+
+
+    def _test_quantized_multiple_inputs_dict_outputs(
+            self, prepare_custom_config_dict, prepare_count_check,
+            convert_count_check, qconfig_dict):
+        """
+        Test the option to have inputs and outputs of the graph quantized
+        """
+        class M(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.conv1 = torch.nn.Conv2d(1, 1, 1)
+                self.conv2 = torch.nn.Conv2d(1, 1, 1)
+
+            def forward(self, x):
+                c1 = self.conv1(x)
+                c2 = self.conv2(x)
+                return {'o1': c1, 'o2': c2}
+
+        # quantized input, quantized output
+        m = M()
+        qconfig_dict = {'': torch.ao.quantization.default_qconfig}
+        m.eval()
+        mp = torch.ao.quantization.quantize_fx.prepare_fx(
+            m, qconfig_dict,
+            prepare_custom_config_dict=prepare_custom_config_dict)
+        self.checkGraphModuleNodes(mp, expected_node_occurrence=prepare_count_check)
+        mp(torch.randn(1, 1, 4, 4))
+        mq = torch.ao.quantization.quantize_fx.convert_fx(mp)
+        self.checkGraphModuleNodes(mq, expected_node_occurrence=convert_count_check)
+
+    def test_quantized_input_quantized_dict_output(self):
+        prepare_custom_config_dict = {
+            'input_quantized_idxs': {0: torch.quint8},
+            'output_quantized_idxs': {0: torch.quint8, 1: torch.quint8}
+        }
+        prepare_count_check = {
+            ns.call_module(torch.ao.quantization.MinMaxObserver): 2,
+        }
+        # two quint8 outputs in config, so no quantize_per_tersor and dequantize needed.
+        convert_count_check = {
+            ns.call_function(torch.quantize_per_tensor): 0,
+            ns.call_method('dequantize'): 0,
+        }
+        qconfig_dict = {'': torch.ao.quantization.default_qconfig}
+        self._test_quantized_multiple_inputs_dict_outputs(
+            prepare_custom_config_dict, prepare_count_check, convert_count_check,
+            qconfig_dict)
 
     @skipIfNoFBGEMM
     def test_convtranspose_per_channel_fails_early(self):
@@ -2897,7 +3071,7 @@ class TestQuantizeFx(QuantizationTestCase):
         quantizeable.
         """
         qconfig_dict = {'': torch.ao.quantization.get_default_qat_qconfig('fbgemm')}
-        prepare_custom_config_dict = {'output_quantized_idxs': [0]}
+        prepare_custom_config_dict = {'output_quantized_idxs': {0: torch.quint8}}
         data = (torch.randn(4, 1, 4, 4),)
 
         # non-quantizeable node, quantized output
@@ -4448,7 +4622,7 @@ class TestQuantizeFxOps(QuantizationTestCase):
         m = M(0.5)
         mp = torch.ao.quantization.quantize_fx.prepare_qat_fx(
             m, {'': torch.ao.quantization.get_default_qat_qconfig('fbgemm')},
-            prepare_custom_config_dict={"input_quantized_idxs": [0]})
+            prepare_custom_config_dict={'input_quantized_idxs': {0: torch.quint8}})
         expected_node_occurrence = {
             ns.call_module(torch.ao.quantization.FusedMovingAvgObsFakeQuantize): 0,
         }
