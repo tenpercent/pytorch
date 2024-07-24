@@ -36,7 +36,8 @@ def generate_inputs(M, N, K, Bias, tensor_options, layout, f=torch.randn):
         out = None
 
     if Bias:
-        bias = f(Bias, **tensor_options)
+        # bias = f(Bias, **tensor_options)
+        bias = torch.randn_like(out, **tensor_options)
     else:
         bias = None
 
@@ -57,11 +58,13 @@ def main(gemm_shape_csv, layout, dtype):
 
     problem_instances = df[["M", "K", "N", "Bias"]].values
 
-    def mm(a, b, out):
-        return torch.mm(a, b, out=out)
+    def mm(a, b):
+        return torch.mm(a, b)
 
-    def addmm(a, b, bias, out):
-        return torch.addmm(bias, a, b, out=out)
+    def addmm(x, a, b):
+        return torch.addmm(x, a, b)
+
+    # layout = 'rrr'
 
     for M, K, N, Bias in (pbar := tqdm(problem_instances)):
         if Bias is pandas.NA:
@@ -72,6 +75,7 @@ def main(gemm_shape_csv, layout, dtype):
                 "max_autotune": True,
                 "autotune_in_subproc": True,
                 "max_autotune_gemm_backends": "CK,Triton,ATen",
+                # "max_autotune_gemm_backends": "Triton,ATen",
                 "compile_threads": 64,
                 "trace.enabled": True,
                 "trace.log_autotuning_results": True,
@@ -80,17 +84,20 @@ def main(gemm_shape_csv, layout, dtype):
         ), dynconfig.patch(
             {"cache_size_limit": len(problem_instances) + 1}
         ), torch.no_grad():
-            a, b, bias, out = generate_inputs(M, N, K, Bias, tensor_options, layout)
+            a, b, bias, _ = generate_inputs(M, N, K, Bias, tensor_options, layout)
             if Bias:
-                Y_compiled = torch.compile(addmm, dynamic=False)(a, b, bias, out)
-                Y = torch.addmm(bias, a, b, out=out)
+                Y_compiled = torch.compile(addmm, dynamic=False)(bias, a, b)
+                Y = torch.addmm(bias, a, b)
             else:
-                Y_compiled = torch.compile(mm, dynamic=False)(a, b, out)
-                Y = mm(a, b, out)
+                Y_compiled = torch.compile(mm, dynamic=False)(a, b)
+                Y = mm(a, b)
             try:
                 torch.testing.assert_close(Y_compiled, Y)
             except AssertionError as e:
                 log.error(e)
+                diff = Y_compiled - Y
+                max_diff = diff.abs().max()
+                log.warning("Max diff: %s", max_diff)
 
 
 if __name__ == "__main__":
