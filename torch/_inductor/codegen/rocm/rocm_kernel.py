@@ -9,11 +9,10 @@ from ...ir import Buffer, ChoiceCaller, IRNode, Layout, PrimitiveInfoType, Tenso
 from ...utils import sympy_product
 from ...virtualized import V
 from ..common import IndentedBuffer, Kernel, OpOverrides
-
 from ..cpp_utils import CppPrinter
-
 from .rocm_benchmark_request import ROCmBenchmarkRequest
 from .rocm_template_buffer import ROCmTemplateBuffer
+
 
 if TYPE_CHECKING:
     from torch._inductor.codegen.rocm.rocm_template import ROCmTemplate
@@ -214,7 +213,7 @@ class ROCmTemplateKernel(ROCmKernel):
         val = sympy_product(sizes)
         return cexpr(self.rename_indexing(val))
 
-    def contiguous_stride(self, node: IRNode, default_value: int = 0) -> str:
+    def contiguous_stride(self, node: Optional[IRNode], default_value: int = 0) -> str:
         """
         Hook called from template call to get the contiguous stride of an arg.
         """
@@ -226,7 +225,18 @@ class ROCmTemplateKernel(ROCmKernel):
         if node is None:
             return str(default_value)
 
-        contiguous_stride = functools.reduce(lambda a, b: max(b, a), node.get_stride(), sympy.Integer(0))
+        # 1D bias case, i.e. the shape when initialized is (N,)
+        if node.get_stride() == [0, 1]:
+            return 0
+
+        # This is supposed to work for the broadcasted bias case, i.e. (M, 1)
+        # But it doesn't?
+        if node.get_stride() == [1, 0]:
+            return 0
+
+        contiguous_stride = functools.reduce(
+            lambda a, b: max(b, a), node.get_stride(), sympy.Integer(0)
+        )
         return cexpr(self.rename_indexing(contiguous_stride))
 
 

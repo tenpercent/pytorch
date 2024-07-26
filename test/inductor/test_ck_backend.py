@@ -6,12 +6,12 @@ import unittest
 import torch
 from torch._inductor import config
 from torch._inductor.test_case import run_tests, TestCase
-
 from torch.testing._internal.common_utils import (
     instantiate_parametrized_tests,
     parametrize,
 )
 from torch.testing._internal.inductor_utils import HAS_CPU, HAS_CUDA
+
 
 torch.set_float32_matmul_precision("high")
 if HAS_CUDA:
@@ -62,9 +62,12 @@ class TestCKBackend(TestCase):
     @unittest.skipIf(config.is_fbcode(), "fbcode requires different CK path setup")
     @unittest.mock.patch.dict(os.environ, {"PATH": _get_path_without_sccache()})
     @parametrize("max_autotune_gemm_backends", ("CK", "ATen,Triton,CK"))
-    def test_max_autotune_precompile(self, max_autotune_gemm_backends):
+    @parametrize("autotune_in_subproc", (True, False))
+    def test_max_autotune_precompile_matmul(
+        self, max_autotune_gemm_backends, autotune_in_subproc
+    ):
         """
-        Make sure autotuning mm in subprocesses doesn't crash.
+        Make sure autotuning mm doesn't crash.
         """
 
         torch.backends.cuda.matmul.allow_fp16_reduced_precision_reduction = False
@@ -82,7 +85,7 @@ class TestCKBackend(TestCase):
         with config.patch(
             {
                 "max_autotune": True,
-                "autotune_in_subproc": True,
+                "autotune_in_subproc": autotune_in_subproc,
                 "max_autotune_gemm_backends": max_autotune_gemm_backends,
                 "compile_threads": 2,
                 "rocm.n_max_profiling_configs": 2,
@@ -171,9 +174,10 @@ class TestCKBackend(TestCase):
     @parametrize("max_autotune_gemm_backends", ("CK", "ATen,Triton,CK"))
     @parametrize("x_shape", ([4096, 2048], [2048], [4096, 1]))
     def test_max_autotune_addmm(self, max_autotune_gemm_backends, x_shape):
+        torch.backends.cuda.matmul.allow_fp16_reduced_precision_reduction = False
 
         m, k, n = 4096, 25728, 2048
-        alpha, beta = 2., .4
+        alpha, beta = 2.0, 0.4
 
         tensor_options = {"device": "cuda", "dtype": torch.float16}
         x = torch.randn(x_shape, **tensor_options)

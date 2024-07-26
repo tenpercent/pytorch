@@ -1,9 +1,8 @@
 # mypy: allow-untyped-defs, disable-error-code="attr-defined, valid-type"
 import copy
-from dataclasses import asdict, dataclass
 import logging
 import random
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 import sympy
 
@@ -14,6 +13,7 @@ from torch._inductor.codegen.rocm.rocm_kernel import ROCmTemplateKernel
 from torch._inductor.ir import Buffer, Layout
 
 from ...utils import IndentedBuffer, try_import_ck_lib
+
 
 _, gen_ops_library, gen_ops_preselected, CKGemmOperation = try_import_ck_lib()
 
@@ -45,13 +45,13 @@ class CKGemmTemplate(CKTemplate):
         auto gemm = {{instance_type}} {};
         auto invoker = gemm.MakeInvoker();
 
-        constexpr auto M = {{M}};
-        constexpr auto N = {{N}};
-        constexpr auto K = {{K}};
-        constexpr auto StrideA = {{a_stride}};
-        constexpr auto StrideB = {{b_stride}};
-        constexpr auto StrideC = {{c_stride}};
-        constexpr auto StrideD = {{d_stride}};
+        const ck::index_t M = {{M}};
+        const ck::index_t N = {{N}};
+        const ck::index_t K = {{K}};
+        const ck::index_t StrideA = {{a_stride}};
+        const ck::index_t StrideB = {{b_stride}};
+        const ck::index_t StrideC = {{c_stride}};
+        constexpr auto StrideD = ck::Number<{{d_stride}}>{};
 
         auto argument = gemm.MakeArgument(
             reinterpret_cast<const {{a_element_dtype}}*>(X),
@@ -158,9 +158,7 @@ class CKGemmTemplate(CKTemplate):
 
         Returns None if the op is not suitable, otherwise returns the op to be used.
         """
-        metas = [
-            T.get_layout() for T in [*self.input_nodes, self.output_node]
-        ]
+        metas = [T.get_layout() for T in [*self.input_nodes, self.output_node]]
         X_meta = metas[0]
         W_meta = metas[1]
         Y_meta = metas[-1]
@@ -255,14 +253,12 @@ class CKGemmTemplate(CKTemplate):
         template_params = []
         for field_name, field_value in op.dict_items():
             if isinstance(field_value, tuple):
+                tuple_elements = ", ".join(map(str, iter(field_value)))
                 if "ds" in field_name:  # element type and layout for bias
-                    template_params.append(
-                        f"/* {field_name} */ Tuple<{', '.join(map(str, iter(field_value)))}>"
-                    )
+                    arg = f"/* {field_name} */ Tuple<{tuple_elements}>"
                 else:  # tile shape
-                    template_params.append(
-                        f"/* {field_name} */ S<{', '.join(map(str, iter(field_value)))}>"
-                    )
+                    arg = f"/* {field_name} */ S<{tuple_elements}>"
+                template_params.append(arg)
             else:
                 if field_value is not None:
                     template_params.append(f"/* {field_name} */ {field_value}")
@@ -286,12 +282,14 @@ class CKGemmTemplate(CKTemplate):
 
         op = copy.deepcopy(op)
 
-        if Bias:
+        if Bias is not None:
             op.ds_layouts = (torch_layout_to_ck_layout(Bias.get_layout()),)
             op.ds_element_dtypes = ((self._TORCH_DTYPE_TO_CK[Bias.get_layout().dtype]),)
             op.c_elementwise_op = "ScaledAdd"
 
-        op.c_shuffle_block_transfer_scalar_per_vector_n_per_block = (op.c_shuffle_block_transfer_scalar_per_vector_n_per_block,) * (2 if Bias else 1)
+        op.c_shuffle_block_transfer_scalar_per_vector_n_per_block = (
+            op.c_shuffle_block_transfer_scalar_per_vector_n_per_block,
+        ) * (2 if Bias else 1)
 
         instance_definition, instance_type = self.emit_ck_instance(op)
 
@@ -324,16 +322,21 @@ class CKGemmTemplate(CKTemplate):
             a_element_dtype=op.a_element_dtype,
             b_element_dtype=op.b_element_dtype,
             c_element_dtype=op.c_element_dtype,
-            bias_element_dtype=op.ds_element_dtypes[0] if Bias else '',
+            bias_element_dtype=op.ds_element_dtypes[0] if Bias is not None else "",
             a_stride=kernel.contiguous_stride(X),
             b_stride=kernel.contiguous_stride(W),
             c_stride=kernel.contiguous_stride(Y),
             d_stride=kernel.contiguous_stride(Bias),
             alpha=self.alpha,
             beta=self.beta,
-            epilogue=f"ScaledAdd {{ {self.alpha}, {self.beta} }}" if Bias else "PassThrough {}",
+            epilogue=f"ScaledAdd {{ {self.alpha}, {self.beta} }}"
+            if Bias is not None
+            else "PassThrough {}",
             has_bias=Bias is not None,
-            null_checks="".join(kernel.check_not_null(node) for node in (X, W, Y) + ((Bias,) if Bias else ())),
+            null_checks="".join(
+                kernel.check_not_null(node)
+                for node in (X, W, Y) + ((Bias,) if Bias is not None else ())
+            ),
             version_comment=version_comment,
         )
 
