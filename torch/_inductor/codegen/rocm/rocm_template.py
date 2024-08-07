@@ -86,13 +86,26 @@ class ROCmTemplate(KernelTemplate):
             unique(self.input_nodes[idx].get_name() for idx in input_reorder)
         )
         expected_args.extend([self.output_node.get_name()])
+
+        log.debug("Call args: %s, Expected args: %s", call_args, expected_args)
         assert list(call_args)[: len(expected_args)] == expected_args, (
             call_args,
             expected_args,
         )
-        extra_args = V.graph.sizevars.size_hints(
-            map(sympy.expand, call_args[len(expected_args) :])
-        )
+        # extra_args = V.graph.sizevars.size_hints(
+        #     map(sympy.expand, call_args[len(expected_args) :])
+        # )
+
+        M = 2240
+        K = 256
+        N = 2048
+        LDA = 256
+        LDB = 2048
+        LDC = 2048
+        LDD = 0
+
+        extra_args = [sarg for sarg in [M, N, K, LDA, LDB, LDC, LDD]]
+
         # create the BenchmarkRequest
         bmreq = ROCmBenchmarkRequest(
             kernel_name=kernel_name,

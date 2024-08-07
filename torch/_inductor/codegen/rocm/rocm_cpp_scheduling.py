@@ -63,6 +63,8 @@ class ROCmCPPScheduling(BaseScheduling):
             compile_wrapper.splice(src_code, strip=True)
             compile_wrapper.writeline("''', 'so')")
 
+            compile_wrapper.writeline("from ctypes import c_int, byref")
+
             metadata_comment = f"# kernel path: {kernel_path}"
             origins, detailed_origins = get_kernel_metadata(node_schedule, wrapper)
             metadata_comment += "\n" + origins + "\n" + detailed_origins

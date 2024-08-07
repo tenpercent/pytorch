@@ -42,16 +42,9 @@ class CKGemmTemplate(CKTemplate):
     {{instance_definition}}
     extern "C" {
     {{kernel_definition}} {
+
         auto gemm = {{instance_type}} {};
         auto invoker = gemm.MakeInvoker();
-
-        const ck::index_t M = {{M}};
-        const ck::index_t N = {{N}};
-        const ck::index_t K = {{K}};
-        const ck::index_t LDA = {{ld_a}};
-        const ck::index_t LDB = {{ld_b}};
-        const ck::index_t LDC = {{ld_c}};
-        constexpr auto LDD = ck::Number<{{ld_d}}>{};
 
         auto argument = gemm.MakeArgument(
             reinterpret_cast<const {{a_element_dtype}}*>(X),
@@ -298,7 +291,6 @@ class CKGemmTemplate(CKTemplate):
 * Generated code for CK inductor backend
 * See {type(self).__module__}.{type(self).__qualname__}
 *
-* Problem size M={X.get_layout().size[-2]} N={W.get_layout().size[-1]} K={X.get_layout().size[-1]}
 * Template instance {op}
 *
 * {torch.__version__=}
@@ -315,19 +307,13 @@ class CKGemmTemplate(CKTemplate):
                 outputs=[Y],
                 names_str="X, W, Bias, Y",
                 input_reorder=self.input_reorder,
+                size_args=["ck::index_t {}".format(arg) for arg in ["M", "N", "K", "LDA", "LDB", "LDC", "LDD"]],
             ),
             instance_type=instance_type,
-            M=kernel.size(X, -2),
-            K=kernel.size(X, -1),
-            N=kernel.size(W, -1),
             a_element_dtype=op.a_element_dtype,
             b_element_dtype=op.b_element_dtype,
             c_element_dtype=op.c_element_dtype,
             bias_element_dtype=op.ds_element_dtypes[0] if Bias is not None else "",
-            ld_a=kernel.leading_dimension(X),
-            ld_b=kernel.leading_dimension(W),
-            ld_c=kernel.leading_dimension(Y),
-            ld_d=kernel.leading_dimension(Bias),
             alpha=self.alpha,
             beta=self.beta,
             epilogue=f"Bilinear {{ {self.alpha}, {self.beta} }}"

@@ -80,6 +80,9 @@ class TestCKBackend(TestCase):
         a = torch.randn(2240, 256, **tensor_options)
         b = torch.randn(256, 2048, **tensor_options)
 
+        # torch._dynamo.mark_dynamic(a, 0)
+        # torch._dynamo.mark_dynamic(b, 1)
+
         assert "rocm" in dir(config)
 
         with config.patch(
