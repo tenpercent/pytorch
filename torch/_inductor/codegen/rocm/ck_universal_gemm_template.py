@@ -38,8 +38,10 @@ class CKGemmTemplate(CKTemplate):
     # the JINJA template for rendering CK Universal GEMMs
     gemm_template = r"""{{version_comment}}
     {{headers}}
+    namespace {
     {{globals}}
     {{instance_definition}}
+    } // namespace
     extern "C" {
     {{kernel_definition}} {
         auto gemm = {{instance_type}} {};
