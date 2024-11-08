@@ -370,15 +370,27 @@ class TestCKBackend(TestCase):
         {"PATH": _get_path_without_sccache(), "PYTORCH_MIOPEN_SUGGEST_NHWC": "1"},
     )
     @parametrize("max_autotune_conv_backends", ("CK", "ATEN,CK,TRITON"))
-    def test_max_autotune_conv2d(self, max_autotune_conv_backends):
+    @parametrize("has_bias", [True, False])
+    def test_max_autotune_conv2d(self, max_autotune_conv_backends, has_bias):
         torch.backends.cuda.matmul.allow_fp16_reduced_precision_reduction = False
 
         tensor_options = {"device": "cuda", "dtype": torch.float32}
 
-        x = torch.randn(1, 8, 224, 224, **tensor_options)
-        w = torch.randn(64, 8, 7, 7, **tensor_options)
+        N = 1
+        iC = 8
+        iH = 224
+        iW = 224
+        oC = 64
+        G = 1
+        kH = 7
+        kW = 7
+
+        x = torch.randn(N, iC, iH, iW, **tensor_options)
+        w = torch.randn(oC, iC // G, kH, kW, **tensor_options)
         x_cl = x.to(memory_format=torch.channels_last)
         w_cl = w.to(memory_format=torch.channels_last)
+
+        bias = torch.randn(oC, **tensor_options) if has_bias else None
 
         assert "rocm" in dir(config)
 
@@ -394,11 +406,11 @@ class TestCKBackend(TestCase):
         ):
 
             @torch.compile(dynamic=False)
-            def conv2d(x, w):
-                return torch.conv2d(x, w)
+            def conv2d(x, w, bias):
+                return torch.conv2d(x, w, bias)
 
-            Y_eager = torch.conv2d(x_cl, w_cl)
-            Y_compiled = conv2d(x_cl, w_cl)
+            Y_eager = torch.conv2d(x_cl, w_cl, bias)
+            Y_compiled = conv2d(x_cl, w_cl, bias)
 
             torch.testing.assert_close(Y_compiled, Y_eager, atol=2e-4, rtol=2e-4)
 
