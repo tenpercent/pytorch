@@ -127,7 +127,7 @@ class CKGroupedConvFwdTemplate(CKTemplate):
 
         const void* p_a = input;
         const void* p_b = weight;
-        const std::array<const void*, NumDTensor> p_ds;
+        const std::array<const void*, NumDTensor> p_ds = { {{bias_name}} };
         void* p_e = output;
         std::array<index_t, NDimSpatial + 3> a_g_n_c_wis_lengths;
         std::array<index_t, NDimSpatial + 3> a_g_n_c_wis_strides;
@@ -273,11 +273,16 @@ class CKGroupedConvFwdTemplate(CKTemplate):
 
                 using G_K    = ck::tensor_layout::convolution::G_K;
 
+                using ConvolutionForwardSpecialization = ck::tensor_operation::device::ConvolutionForwardSpecialization;
+
+                // CK GEMM definitions
+
+                using Row = ck::tensor_layout::gemm::RowMajor;
+                using Col = ck::tensor_layout::gemm::ColumnMajor;
+
                 using BlockGemmPipelineScheduler = ck::BlockGemmPipelineScheduler;
                 using GemmSpecialization = ck::tensor_operation::device::GemmSpecialization;
                 using BlockGemmPipelineVersion = ck::BlockGemmPipelineVersion;
-
-                using ConvolutionForwardSpecialization = ck::tensor_operation::device::ConvolutionForwardSpecialization;
 
                 namespace ck {
                 namespace utils {
@@ -522,6 +527,11 @@ class CKGroupedConvFwdTemplate(CKTemplate):
 
         op = copy.deepcopy(op)
 
+        if Bias is not None:
+            op.ds_layout = ("Row",)
+            op.ds_element_dtype = ((self._TORCH_DTYPE_TO_CK[Bias.get_layout().dtype]),)
+            op.c_elementwise_op = "Bilinear"
+
         instance_definition, instance_type = self.emit_ck_instance(op)
 
         return self._template_from_string(self.conv_template).render(
@@ -538,6 +548,7 @@ class CKGroupedConvFwdTemplate(CKTemplate):
                 size_args=[],
             ),
             n_d_tensors=1 if Bias is not None else 0,
+            bias_name="bias" if Bias is not None else "",
             n_dim_spatial=self.n_spatial_dimensions,
             group_count=self.groups,
             batch_size=X.shape[0],  # type: ignore[index]

@@ -537,12 +537,19 @@ def convolution(
     ):
         return convert_1x1_conv_to_mm(x, weight, bias)
 
-    if bias is not None and ir.get_device_type(x) != "cpu":
-        # peel off the bias, cudnn is slower with it
-        result = convolution(x, weight, None, **kwargs)
+    def maybe_append_bias(result, bias):
+        if bias is None:
+            return result
         return L[aten.add](
             result, L[aten.view](bias, [result.get_size()[1]] + ndim * [1])
         )
+
+    # if bias is not None and ir.get_device_type(x) != "cpu":
+    #     # peel off the bias, cudnn is slower with it
+    #     result = convolution(x, weight, None, **kwargs)
+    #     return L[aten.add](
+    #         result, L[aten.view](bias, [result.get_size()[1]] + ndim * [1])
+    #     )
 
     x.realize()
     weight.realize()
@@ -661,6 +668,9 @@ def convolution(
                     num_warps=cfg.num_warps,
                     **cfg.kwargs,
                 )
+
+    choices = [maybe_append_bias(c, bias=bias) for c in choices]
+
     if use_ck_conv_template(layout):
         CKGroupedConvFwdTemplate.add_ck_conv_choices(
             choices,
