@@ -37,6 +37,7 @@ RUN wget -qO - https://repo.radeon.com/rocm/rocm.gpg.key | gpg --dearmor -o /usr
     > /etc/apt/sources.list.d/rocm.list
 
 # Install ONLY required ROCm libraries (NOT -complete)
+# Package names verified from ROCm 7.2 apt repository
 RUN apt-get update && apt-get install -y --no-install-recommends \
     rocm-hip-runtime-dev \
     rocm-hip-sdk \
@@ -50,11 +51,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     rocsolver-dev \
     hipblaslt-dev \
     miopen-hip-dev \
-    rocprim-dev \
     hipcub-dev \
     rocthrust-dev \
-    hiprtc-dev \
     comgr \
+    rocm-llvm-dev \
     hsa-rocr-dev \
     rocm-smi-lib \
     rocm-cmake \
