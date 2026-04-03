@@ -39,8 +39,11 @@ RUN wget -qO - https://repo.radeon.com/rocm/rocm.gpg.key | gpg --dearmor -o /usr
 
 # Install ONLY required ROCm libraries (NOT -complete)
 # Package names verified from ROCm 7.2 apt repository
-# Note: rocm-cmake and rocminfo are pulled as dependencies with correct versions
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Install base dependencies first to avoid version conflicts with Ubuntu repos
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    rocm-core \
+    && apt-get install -y --no-install-recommends \
     rocm-hip-runtime-dev \
     rocm-hip-sdk \
     rocblas-dev \
