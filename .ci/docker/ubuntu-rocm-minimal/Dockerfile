@@ -31,10 +31,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ninja-build \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# Add ROCm repository
+# Add ROCm repository with high priority to override Ubuntu's ROCm packages
 RUN wget -qO - https://repo.radeon.com/rocm/rocm.gpg.key | gpg --dearmor -o /usr/share/keyrings/rocm.gpg && \
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/${ROCM_VERSION} jammy main" \
-    > /etc/apt/sources.list.d/rocm.list
+    > /etc/apt/sources.list.d/rocm.list && \
+    printf 'Package: *\nPin: release o=AMD\nPin-Priority: 600\n' > /etc/apt/preferences.d/rocm-pin-600
 
 # Install ONLY required ROCm libraries (NOT -complete)
 # Package names verified from ROCm 7.2 apt repository
