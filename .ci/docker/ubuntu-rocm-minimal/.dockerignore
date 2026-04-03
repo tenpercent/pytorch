@@ -1,0 +1,13 @@
+.git
+.github
+build
+dist
+*.pyc
+__pycache__
+*.egg-info
+.pytest_cache
+.mypy_cache
+*.so
+*.o
+.claude
+.cline_storage
