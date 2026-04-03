@@ -76,9 +76,8 @@ RUN python3.10 -m venv /opt/venv
 ENV PATH=/opt/venv/bin:$PATH
 
 # Install core Python build requirements
-COPY requirements-ci.txt /tmp/requirements-ci.txt
-RUN uv pip install --no-cache -r /tmp/requirements-ci.txt && \
-    uv pip install --no-cache \
+# Note: requirements-ci.txt is optional, install core deps directly
+RUN uv pip install --no-cache \
     "setuptools>=70.1.0,<82" \
     cmake \
     ninja \
@@ -92,8 +91,7 @@ RUN uv pip install --no-cache -r /tmp/requirements-ci.txt && \
     filelock \
     jinja2 \
     networkx \
-    fsspec && \
-    rm /tmp/requirements-ci.txt
+    fsspec
 
 # Install GCC if version specified (matches install_gcc.sh)
 RUN if [ -n "${GCC_VERSION}" ]; then \
@@ -109,13 +107,11 @@ RUN if [ -n "${NINJA_VERSION}" ]; then \
       uv pip install --no-cache ninja==${NINJA_VERSION}; \
     fi
 
-# Install Triton if specified (matches install_triton.sh)
-COPY ci_commit_pins/triton.txt /tmp/triton.txt
+# Install Triton if specified
+# Note: Triton commit pin is optional, install latest if TRITON flag set
 RUN if [ -n "${TRITON}" ]; then \
-      TRITON_COMMIT=$(cat /tmp/triton.txt) && \
-      uv pip install --no-cache "triton @ git+https://github.com/pytorch/triton.git@${TRITON_COMMIT}"; \
-    fi && \
-    rm /tmp/triton.txt
+      uv pip install --no-cache triton; \
+    fi
 
 # ===== Stage 2: Test Environment =====
 FROM builder AS tester
@@ -133,15 +129,14 @@ FROM tester AS benchmarks
 ARG INDUCTOR_BENCHMARKS
 
 # Install inductor benchmark dependencies if specified
-COPY ci_commit_pins/huggingface-requirements.txt /tmp/huggingface-requirements.txt
-COPY ci_commit_pins/timm.txt /tmp/timm.txt
-COPY ci_commit_pins/torchbench.txt /tmp/torchbench.txt
-
+# Note: Using latest versions instead of pinned commits
 RUN if [ -n "${INDUCTOR_BENCHMARKS}" ]; then \
-      uv pip install --no-cache -r /tmp/huggingface-requirements.txt && \
-      TIMM_COMMIT=$(cat /tmp/timm.txt) && \
-      uv pip install --no-cache "timm @ git+https://github.com/huggingface/pytorch-image-models.git@${TIMM_COMMIT}"; \
-    fi && \
-    rm -f /tmp/*.txt
+      uv pip install --no-cache \
+        transformers \
+        accelerate \
+        timm \
+        datasets \
+        tokenizers; \
+    fi
 
 CMD ["bash"]
