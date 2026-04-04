@@ -60,6 +60,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     rocm-llvm rocm-llvm-dev \
     hsa-rocr hsa-rocr-dev \
     rocm-smi-lib \
+    roctracer roctracer-dev \
+    rocprofiler rocprofiler-dev \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Set ROCm environment
