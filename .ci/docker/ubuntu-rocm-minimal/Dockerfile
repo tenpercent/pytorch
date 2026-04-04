@@ -40,26 +40,25 @@ RUN wget -qO - https://repo.radeon.com/rocm/rocm.gpg.key | gpg --dearmor -o /usr
     > /etc/apt/preferences.d/rocm-pin
 
 # Install ONLY required ROCm libraries (NOT -complete)
-# Package names verified from ROCm 7.2 apt repository
+# Install both runtime and dev packages explicitly (dev packages don't always pull runtime)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     rocm-hip-runtime-dev \
     rocm-hip-sdk \
-    rocblas-dev \
-    hipblas-dev \
-    rocrand-dev \
-    hiprand-dev \
-    hipsparse-dev \
-    hipfft-dev \
-    hipsolver-dev \
-    rocsolver-dev \
-    hipblaslt-dev \
-    miopen-hip-dev \
+    rocblas rocblas-dev \
+    hipblas hipblas-dev \
+    rocrand rocrand-dev \
+    hiprand hiprand-dev \
+    hipsparse hipsparse-dev \
+    hipfft hipfft-dev \
+    hipsolver hipsolver-dev \
+    rocsolver rocsolver-dev \
+    hipblaslt hipblaslt-dev \
+    miopen-hip miopen-hip-dev \
     hipcub-dev \
     rocthrust-dev \
     comgr \
-    rocm-llvm \
-    rocm-llvm-dev \
-    hsa-rocr-dev \
+    rocm-llvm rocm-llvm-dev \
+    hsa-rocr hsa-rocr-dev \
     rocm-smi-lib \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
