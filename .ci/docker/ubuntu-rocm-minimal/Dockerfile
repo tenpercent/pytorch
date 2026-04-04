@@ -71,7 +71,8 @@ ENV ROCM_PATH=/opt/rocm \
 
 # Install uv (fast Python package manager) - replaces conda
 RUN wget -qO- https://astral.sh/uv/install.sh | sh && \
-    mv /root/.cargo/bin/uv /usr/local/bin/
+    mv /root/.local/bin/uv /usr/local/bin/ && \
+    mv /root/.local/bin/uvx /usr/local/bin/
 
 # Create venv and install build dependencies
 RUN python3 -m venv /opt/venv
