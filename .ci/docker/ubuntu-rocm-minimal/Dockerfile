@@ -25,9 +25,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     ca-certificates \
     gnupg \
-    python3.10 \
-    python3.10-dev \
-    python3.10-venv \
+    python3 \
+    python3-dev \
+    python3-venv \
+    python3-pip \
     ninja-build \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
@@ -71,7 +72,7 @@ RUN wget -qO- https://astral.sh/uv/install.sh | sh && \
     mv /root/.cargo/bin/uv /usr/local/bin/
 
 # Create venv and install build dependencies
-RUN python3.10 -m venv /opt/venv
+RUN python3 -m venv /opt/venv
 ENV PATH=/opt/venv/bin:$PATH
 
 # Install core Python build requirements
