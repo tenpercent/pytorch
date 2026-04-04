@@ -32,10 +32,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ninja-build \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# Add ROCm repository
+# Add ROCm repository and disable Ubuntu's ROCm packages
 RUN wget -qO - https://repo.radeon.com/rocm/rocm.gpg.key | gpg --dearmor -o /usr/share/keyrings/rocm.gpg && \
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/${ROCM_VERSION} noble main" \
-    > /etc/apt/sources.list.d/rocm.list
+    > /etc/apt/sources.list.d/rocm.list && \
+    printf 'Package: rocm* hip* roc* comgr miopen*\nPin: release o=Ubuntu\nPin-Priority: -1\n\nPackage: rocm* hip* roc* comgr miopen*\nPin: origin repo.radeon.com\nPin-Priority: 1000\n' \
+    > /etc/apt/preferences.d/rocm-pin
 
 # Install ONLY required ROCm libraries (NOT -complete)
 # Package names verified from ROCm 7.2 apt repository
