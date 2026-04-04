@@ -57,6 +57,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     hipcub-dev \
     rocthrust-dev \
     comgr \
+    rocm-llvm \
     rocm-llvm-dev \
     hsa-rocr-dev \
     rocm-smi-lib \
